@@ -293,14 +293,24 @@ def load_workspace(config_file, args):
         if not args.detached:
             builder.session.attach_session()
     except exc.TmuxSessionExists as e:
-        if not args.detached and (
-            args.answer_yes or prompt_yes_no('%s Attach?' % e)
-        ):
-            if 'TMUX' in os.environ:
-                builder.session.switch_client()
-
+        if not args.detached:
+            if args.answer_yes or prompt_yes_no('%s Attach?' % e):
+                if 'TMUX' in os.environ:
+                    builder.session.switch_client()
+                else:
+                    builder.session.attach_session()
             else:
-                builder.session.attach_session()
+                builder.sconf['session_name'] += "_" + os.path.basename(os.getcwd())
+                print(builder.sconf['session_name'])
+                try:
+                    builder.build()
+                    builder.session.attach_session()
+                except exc.TmuxSessionExists as e:
+                    if prompt_yes_no('%s Attach?' % e):
+                        if 'TMUX' in os.environ:
+                            builder.session.switch_client()
+                        else:
+                            builder.session.attach_session()
         return
     except exc.TmuxpException as e:
         import traceback
