@@ -13,6 +13,7 @@ import os
 import sys
 import logging
 import unittest
+import tempfile
 import time
 
 import kaptan
@@ -387,7 +388,7 @@ class StartDirectoryTest(TmuxTestCase):
       - shell_command:
         - echo "moo"
     - window_name: cwd containing a space
-      start_directory: /tmp/foo bar
+      start_directory: {TMP_DIR}/foo bar
       layout: main-horizontal
       panes:
       - shell_command:
@@ -419,8 +420,11 @@ class StartDirectoryTest(TmuxTestCase):
 
     def setUp(self):
         super(StartDirectoryTest, self).setUp()
-        if not os.path.exists('/tmp/foo bar'):
-            os.mkdir('/tmp/foo bar')
+
+        self.tempdir = tempfile.gettempdir()
+
+        if not os.path.exists('{0}/foo bar'.format(self.tempdir)):
+            os.mkdir('{0}/foo bar'.format(self.tempdir))
             self._temp_dir_created = True
         else:
             self._temp_dir_created = False
@@ -428,12 +432,16 @@ class StartDirectoryTest(TmuxTestCase):
     def tearDown(self):
         super(StartDirectoryTest, self).tearDown()
         if self._temp_dir_created:
-            os.rmdir('/tmp/foo bar')
+            os.rmdir('{0}/foo bar'.format(self.tempdir))
 
     def test_start_directory(self):
 
+        test_config = self.yaml_config.format(
+            TMP_DIR=self.tempdir
+        )
+
         sconfig = kaptan.Kaptan(handler='yaml')
-        sconfig = sconfig.import_config(self.yaml_config).get()
+        sconfig = sconfig.import_config(test_config).get()
         sconfig = config.expand(sconfig)
         sconfig = config.trickle(sconfig)
 
@@ -441,16 +449,20 @@ class StartDirectoryTest(TmuxTestCase):
         builder.build(session=self.session)
 
         assert(self.session == builder.session)
-        dirs = ['/usr/bin', '/dev', '/tmp/foo bar', '/usr', os.getcwd()]
+
+        dirs = ['/usr/bin', '/dev', '{0}/foo bar'.format(self.tempdir), '/usr', os.getcwd()]
         for path, window in zip(dirs, self.session.windows):
             for p in window.panes:
                 for i in range(60):
                     p.server._update_panes()
-                    if p.get('pane_current_path') == path:
+
+                    print ([path, '/private' + path])
+                    # Handle case where directories resolve to /private/ in OSX
+                    if any(p.get('pane_current_path') == p2 for p2 in [path, '/private' + path]):
                         break
                     time.sleep(.2)
 
-                self.assertEqual(p.get('pane_current_path'), path)
+                self.assertIn(path, p.get('pane_current_path'))
 
 
 class PaneOrderingTest(TmuxTestCase):
